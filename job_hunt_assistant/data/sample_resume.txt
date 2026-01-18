@@ -1,0 +1,46 @@
+John Doe  
+Email: johndoe@example.com  
+Phone: (555) 123-4567  
+Location: New York, NY  
+LinkedIn: linkedin.com/in/johndoe  
+GitHub: github.com/johndoe  
+
+PROFESSIONAL SUMMARY  
+Detail-oriented and analytical aspiring Business Analyst with a strong foundation in data analysis, business intelligence tools, and process improvement. Adept at transforming data into actionable insights to support business decision-making. Passionate about bridging the gap between technical teams and business stakeholders to drive efficiency and growth.
+
+SKILLS  
+- Data Analysis (Excel, SQL, Python, Power BI)  
+- Business Requirements Gathering  
+- Process Mapping & Documentation  
+- Stakeholder Communication  
+- Agile & Scrum Methodologies  
+- Statistical Analysis  
+- Microsoft Office Suite  
+
+EDUCATION  
+Bachelor of Science in Business Administration  
+XYZ University — Graduated: May 2023  
+
+RELEVANT PROJECTS  
+**Sales Data Dashboard**  
+- Created an interactive Power BI dashboard to visualize regional sales trends.  
+- Used Excel and SQL to clean and process raw sales data.  
+
+**Customer Churn Analysis**  
+- Analyzed customer churn patterns using Python and pandas.  
+- Presented findings with actionable recommendations to reduce churn.  
+
+CERTIFICATIONS  
+- Google Data Analytics Certificate (Coursera)  
+- Certified ScrumMaster (CSM) – Scrum Alliance  
+
+EXPERIENCE  
+Customer Service Intern — ABC Corporation  
+June 2022 – Aug 2022  
+- Collected customer feedback data and summarized insights for the product team.  
+- Worked with the business team to document common service pain points.  
+
+VOLUNTEER WORK  
+Data Volunteer — DataKind  
+- Assisted a nonprofit in structuring survey data and visualizing findings.  
+

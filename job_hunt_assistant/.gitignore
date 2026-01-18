@@ -1,0 +1,23 @@
+# Python byte‑code
+__pycache__/
+*.py[cod]
+
+# Virtual‑environment folders
+venv/
+env/
+.venv/
+
+# Environment files (keep your keys private!)
+.env
+*.env
+
+# OS‑specific files
+Thumbs.db
+.DS_Store
+
+# Streamlit cache
+.streamlit/
+
+# Data that can be regenerated
+data/cover_letters/
+data/applications_log.csv
