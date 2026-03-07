@@ -10,6 +10,8 @@ env/
 # Environment files (keep your keys private!)
 .env
 *.env
+.env.example
+*.env.example
 
 # OS‑specific files
 Thumbs.db
