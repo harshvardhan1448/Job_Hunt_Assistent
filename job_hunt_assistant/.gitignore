@@ -15,8 +15,8 @@ env/
 Thumbs.db
 .DS_Store
 
-# Streamlit cache
-.streamlit/
+# Streamlit cache & secrets
+.streamlit/secrets.toml
 
 # Data that can be regenerated
 data/cover_letters/

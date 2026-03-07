@@ -2,19 +2,24 @@ from crewai import Agent, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from utils.config import GEMINI_API_KEY
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash-001",
-    temperature=0.2,
-    google_api_key=GEMINI_API_KEY
-)
+
+def _get_llm():
+    return ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash-001",
+        temperature=0.2,
+        google_api_key=GEMINI_API_KEY,
+    )
+
+
 def get_jd_analyst_agent():
     return Agent(
         role="JD Analyst",
         goal="Understand and summarize government job postings",
         backstory="You're an expert in job market analysis with a focus on US federal job listings.",
-        llm=llm,
-        verbose=True
+        llm=_get_llm(),
+        verbose=True,
     )
+
 
 def create_jd_analysis_task(agent, job_description):
     return Task(
@@ -27,5 +32,5 @@ def create_jd_analysis_task(agent, job_description):
         """,
         expected_output="A structured markdown summary containing sections for Qualifications, Required Skills, and Responsibilities.",
         agent=agent,
-        output_file='/data/report.md'
+        output_file="data/report.md",
     )

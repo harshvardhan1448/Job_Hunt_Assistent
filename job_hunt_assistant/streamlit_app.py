@@ -15,12 +15,16 @@ user_bio = st.text_area("Short Bio (for outreach tone)", "I’m a data professio
 
 # Step 1: Search Jobs
 if st.button("Search Jobs"):
-    job_posts = fetch_usajobs(keyword, location, results_per_page=5)
-    if not job_posts:
-        st.error("No job postings found for this search.")
-    else:
-        st.session_state["jobs"] = job_posts
-        st.success("Jobs fetched! Select the ones you'd like to apply for.")
+    try:
+        with st.spinner("Searching USAJobs..."):
+            job_posts = fetch_usajobs(keyword, location, results_per_page=5)
+        if not job_posts:
+            st.error("No job postings found for this search.")
+        else:
+            st.session_state["jobs"] = job_posts
+            st.success(f"Found {len(job_posts)} jobs! Select the ones you'd like to apply for.")
+    except Exception as e:
+        st.error(f"Failed to fetch jobs: {e}")
 
 # Step 2: Show checkbox list for job selection
 if "jobs" in st.session_state:
@@ -43,8 +47,12 @@ if "jobs" in st.session_state:
         else:
             for i in selected_indexes:
                 job_data = st.session_state["jobs"][i]['MatchedObjectDescriptor']
-                with st.spinner(f"Applying to: {job_data.get('PositionTitle')}"):
-                    result = run_pipeline(job_data, resume_text, user_bio)
-                    st.markdown("---")
-                    st.markdown(f"### The reach-out message for: {job_data.get('PositionTitle')}")
-                    st.markdown(result)
+                title = job_data.get('PositionTitle', 'Unknown')
+                with st.spinner(f"Processing: {title}..."):
+                    try:
+                        result = run_pipeline(job_data, resume_text, user_bio)
+                        st.markdown("---")
+                        st.markdown(f"### Outreach message for: {title}")
+                        st.markdown(result)
+                    except Exception as e:
+                        st.error(f"Error processing '{title}': {e}")
