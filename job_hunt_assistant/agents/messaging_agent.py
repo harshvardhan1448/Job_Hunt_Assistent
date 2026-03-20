@@ -4,7 +4,7 @@ from utils.config import GEMINI_API_KEY
 
 def _get_llm():
     return LLM(
-        model="gemini/gemini-1.5-flash",
+        model="gemini/gemini-1.5-flash-001",
         api_key=GEMINI_API_KEY,
         temperature=0.5,
     )
