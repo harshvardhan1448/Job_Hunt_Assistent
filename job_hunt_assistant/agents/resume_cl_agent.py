@@ -1,10 +1,10 @@
 from crewai import Agent, Task, LLM
-from utils.config import GEMINI_API_KEY
+from utils.config import GEMINI_API_KEY, GEMINI_MODEL
 
 
 def _get_llm():
     return LLM(
-        model="gemini/gemini-1.5-flash-001",
+        model=GEMINI_MODEL,
         api_key=GEMINI_API_KEY,
         temperature=0.3,
     )
