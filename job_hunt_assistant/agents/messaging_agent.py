@@ -1,8 +1,11 @@
+"""Outreach message agent and task definitions."""
+
 from crewai import Agent, Task, LLM
 from utils.config import GEMINI_API_KEY, GEMINI_MODEL
 
 
 def _get_llm():
+    """Build the LLM configuration used by the outreach agent."""
     return LLM(
         model=GEMINI_MODEL,
         api_key=GEMINI_API_KEY,
@@ -11,6 +14,7 @@ def _get_llm():
 
 
 def get_messaging_agent():
+    """Create and return the outreach message writing agent."""
     return Agent(
         role="Outreach Message Writer",
         goal="Draft personalized messages for job outreach",
@@ -26,6 +30,14 @@ def create_messaging_task(
     agency_name,
     user_bio="I'm a data professional passionate about public service.",
 ):
+    """Create a task that drafts a short outreach message.
+
+    Args:
+        agent: CrewAI agent handling outreach writing.
+        job_summary: Summary of the target role.
+        agency_name: Hiring agency/organization name.
+        user_bio: Candidate bio used to personalize tone.
+    """
     return Task(
         description=f"""
         Write a concise and compelling outreach message that the candidate could send to someone at {agency_name}, expressing interest in the job described below.

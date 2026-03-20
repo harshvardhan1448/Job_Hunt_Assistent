@@ -1,8 +1,11 @@
+"""Resume summary and cover-letter agent/task definitions."""
+
 from crewai import Agent, Task, LLM
 from utils.config import GEMINI_API_KEY, GEMINI_MODEL
 
 
 def _get_llm():
+    """Build the LLM configuration used by the resume agent."""
     return LLM(
         model=GEMINI_MODEL,
         api_key=GEMINI_API_KEY,
@@ -11,6 +14,7 @@ def _get_llm():
 
 
 def get_resume_cl_agent():
+    """Create and return the resume + cover-letter writing agent."""
     return Agent(
         role="Resume & Cover Letter Writer",
         goal="Customize application materials to match job descriptions",
@@ -21,6 +25,13 @@ def get_resume_cl_agent():
 
 
 def create_resume_cl_task(agent, job_summary, resume_text):
+    """Create a task that generates resume summary and cover letter.
+
+    Args:
+        agent: CrewAI agent that writes resume artifacts.
+        job_summary: Job context extracted from the posting.
+        resume_text: Candidate's current resume text.
+    """
     return Task(
         description=f"""
         Based on the job summary below, tailor the candidate's resume summary and generate a personalized cover letter.

@@ -1,9 +1,24 @@
+"""USAJobs API client helpers."""
+
 import requests
 from utils.config import USAJOBS_API_KEY, USAJOBS_EMAIL
 
 
 def fetch_usajobs(keyword, location="remote", results_per_page=5):
-    """Search USAJobs and return a list of SearchResultItems."""
+    """Search USAJobs and return a list of `SearchResultItems`.
+
+    Args:
+        keyword: Main query term (for example, "program analyst").
+        location: Human-readable location name accepted by USAJobs.
+        results_per_page: Maximum number of records to request.
+
+    Returns:
+        A list of USAJobs `SearchResultItems` objects.
+
+    Raises:
+        ValueError: If required USAJobs configuration is missing.
+        requests.HTTPError: If the API response is unsuccessful.
+    """
     if not USAJOBS_API_KEY:
         raise ValueError(
             "USAJOBS_API_KEY is not set. "

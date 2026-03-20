@@ -1,8 +1,11 @@
+"""JD Analyst agent and task definitions."""
+
 from crewai import Agent, Task, LLM
 from utils.config import GEMINI_API_KEY, GEMINI_MODEL
 
 
 def _get_llm():
+    """Build the LLM configuration used by the JD analyst."""
     return LLM(
         model=GEMINI_MODEL,
         api_key=GEMINI_API_KEY,
@@ -11,6 +14,7 @@ def _get_llm():
 
 
 def get_jd_analyst_agent():
+    """Create and return the JD analysis agent."""
     return Agent(
         role="JD Analyst",
         goal="Understand and summarize government job postings",
@@ -21,6 +25,12 @@ def get_jd_analyst_agent():
 
 
 def create_jd_analysis_task(agent, job_description):
+    """Create the JD analysis task for a given job description.
+
+    Args:
+        agent: CrewAI agent responsible for analysis.
+        job_description: Raw job summary text from USAJobs.
+    """
     return Task(
         description=f"""
         Analyze the following USAJobs job posting and extract:

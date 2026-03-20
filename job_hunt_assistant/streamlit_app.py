@@ -1,3 +1,5 @@
+"""Streamlit UI for searching jobs and generating application artifacts."""
+
 import streamlit as st
 import time
 from orchestrator import run_pipeline
@@ -32,6 +34,7 @@ if "jobs" in st.session_state:
     selected_indexes = []
     st.markdown("### Select Jobs to Apply For:")
     for i, job in enumerate(st.session_state["jobs"]):
+        # USAJobs wraps the useful fields inside MatchedObjectDescriptor.
         job_data = job['MatchedObjectDescriptor']
         title = job_data.get('PositionTitle', 'Unknown Title')
         org = job_data.get('OrganizationName', 'Unknown Agency')
@@ -53,6 +56,7 @@ if "jobs" in st.session_state:
                 title = job_data.get('PositionTitle', 'Unknown')
                 with st.spinner(f"Processing: {title}..."):
                     try:
+                        # Pipeline returns a structured dict with generated artifacts.
                         result = run_pipeline(job_data, resume_text, user_bio)
                         if isinstance(result, dict):
                             resume_summary = result.get("resume_summary", "")
@@ -77,4 +81,5 @@ if "jobs" in st.session_state:
                     except Exception as e:
                         st.error(f"Error processing '{title}': {e}")
                 if len(selected_indexes) > 1:
+                    # Gentle cooldown to reduce burst requests on free-tier quotas.
                     time.sleep(8)

@@ -1,3 +1,5 @@
+"""Pipeline orchestration for multi-agent job application generation."""
+
 import os
 import re
 import time
@@ -10,6 +12,7 @@ from utils.tracking import log_application, save_cover_letter_file
 
 
 def load_resume(path="data/sample_resume.txt"):
+    """Load resume text from disk for local smoke tests."""
     with open(path, "r", encoding="utf-8") as file:
         return file.read()
 
@@ -25,6 +28,7 @@ def extract_between_markers(text, start, end=None):
 
 
 def _parse_retry_delay(error_text, default_seconds=30):
+    """Extract retry delay seconds from provider error text when available."""
     retry_patterns = [
         r"retry in\s+([\d.]+)s",
         r'"retryDelay"\s*:\s*"(\d+)s"',
@@ -40,6 +44,7 @@ def _parse_retry_delay(error_text, default_seconds=30):
 
 
 def _kickoff_with_retry(crew, max_retries=2):
+    """Run crew kickoff with simple retry behavior for transient quota errors."""
     attempt = 0
     while True:
         try:
@@ -53,13 +58,24 @@ def _kickoff_with_retry(crew, max_retries=2):
             if (not is_rate_limit) or attempt >= max_retries:
                 raise
 
+            # Respect provider-suggested backoff (when present) before retrying.
             wait_seconds = _parse_retry_delay(error_text, default_seconds=30)
             time.sleep(wait_seconds)
             attempt += 1
 
 
 def run_pipeline(job_data, resume_text, user_bio):
-    """Run the full CrewAI pipeline for a single job posting."""
+    """Run the full CrewAI pipeline for one job and return structured outputs.
+
+    Args:
+        job_data: USAJobs `MatchedObjectDescriptor` payload.
+        resume_text: Candidate's resume text.
+        user_bio: Short candidate bio for outreach personalization.
+
+    Returns:
+        Dictionary containing generated resume summary, cover letter,
+        outreach message, and metadata for display/logging.
+    """
     try:
         job_summary = job_data['UserArea']['Details']['JobSummary']
     except (KeyError, TypeError):
@@ -68,7 +84,7 @@ def run_pipeline(job_data, resume_text, user_bio):
     agency_name = job_data.get('OrganizationName', 'Unknown Agency')
     job_title = job_data.get('PositionTitle', 'Unknown Position')
 
-    # Limit input size to reduce free-tier token pressure
+    # Limit input size to reduce free-tier token pressure.
     if resume_text:
         resume_text = resume_text[:6000]
     if user_bio:

@@ -1,3 +1,9 @@
+"""Centralized configuration loader for local and Streamlit deployments.
+
+This module reads environment variables from a project-level `.env` file and
+falls back to Streamlit secrets when running on Streamlit Cloud.
+"""
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -5,7 +11,17 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 
+
 def _get_secret(key, default=None):
+    """Return a configuration value from env vars or Streamlit secrets.
+
+    Args:
+        key: Secret key name to lookup.
+        default: Value to return if the key does not exist.
+
+    Returns:
+        The resolved secret value, or `default`.
+    """
     value = os.getenv(key)
     if value:
         return value
@@ -23,6 +39,7 @@ USAJOBS_EMAIL = _get_secret("USAJOBS_EMAIL", "your-email@example.com")
 GEMINI_API_KEY = _get_secret("GEMINI_API_KEY")
 GEMINI_MODEL = _get_secret("GEMINI_MODEL", "gemini/gemini-2.5-flash")
 
+# Mirror Gemini key names expected by different SDK/provider layers.
 if GEMINI_API_KEY:
     if not os.getenv("GEMINI_API_KEY"):
         os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
