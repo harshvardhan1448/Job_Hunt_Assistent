@@ -21,7 +21,7 @@ def _get_secret(key, default=None):
 USAJOBS_API_KEY = _get_secret("USAJOBS_API_KEY")
 USAJOBS_EMAIL = _get_secret("USAJOBS_EMAIL", "your-email@example.com")
 GEMINI_API_KEY = _get_secret("GEMINI_API_KEY")
-GEMINI_MODEL = _get_secret("GEMINI_MODEL", "gemini/gemini-2.0-flash")
+GEMINI_MODEL = _get_secret("GEMINI_MODEL", "gemini/gemini-2.0-flash-lite")
 
 if GEMINI_API_KEY:
     if not os.getenv("GEMINI_API_KEY"):

@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from orchestrator import run_pipeline
 from usajobs_api import fetch_usajobs
 
@@ -45,6 +46,8 @@ if "jobs" in st.session_state:
         elif not resume_text.strip():
             st.warning("Please paste your resume before applying.")
         else:
+            if len(selected_indexes) > 1:
+                st.info("Multiple jobs selected. Processing one-by-one with cooldown to avoid API rate limits.")
             for i in selected_indexes:
                 job_data = st.session_state["jobs"][i]['MatchedObjectDescriptor']
                 title = job_data.get('PositionTitle', 'Unknown')
@@ -56,3 +59,5 @@ if "jobs" in st.session_state:
                         st.markdown(result)
                     except Exception as e:
                         st.error(f"Error processing '{title}': {e}")
+                if len(selected_indexes) > 1:
+                    time.sleep(8)

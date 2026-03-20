@@ -1,4 +1,6 @@
 import os
+import re
+import time
 from crewai import Crew, Process
 from agents.jd_analyst import get_jd_analyst_agent, create_jd_analysis_task
 from agents.resume_cl_agent import get_resume_cl_agent, create_resume_cl_task
@@ -22,6 +24,40 @@ def extract_between_markers(text, start, end=None):
         return "Not found"
 
 
+def _parse_retry_delay(error_text, default_seconds=30):
+    retry_patterns = [
+        r"retry in\s+([\d.]+)s",
+        r'"retryDelay"\s*:\s*"(\d+)s"',
+    ]
+    for pattern in retry_patterns:
+        match = re.search(pattern, error_text, flags=re.IGNORECASE)
+        if match:
+            try:
+                return max(default_seconds, int(float(match.group(1))))
+            except ValueError:
+                continue
+    return default_seconds
+
+
+def _kickoff_with_retry(crew, max_retries=2):
+    attempt = 0
+    while True:
+        try:
+            return crew.kickoff()
+        except Exception as exc:
+            error_text = str(exc)
+            is_rate_limit = any(
+                token in error_text.lower()
+                for token in ["ratelimit", "resource_exhausted", "quota", "429"]
+            )
+            if (not is_rate_limit) or attempt >= max_retries:
+                raise
+
+            wait_seconds = _parse_retry_delay(error_text, default_seconds=30)
+            time.sleep(wait_seconds)
+            attempt += 1
+
+
 def run_pipeline(job_data, resume_text, user_bio):
     """Run the full CrewAI pipeline for a single job posting."""
     try:
@@ -31,6 +67,12 @@ def run_pipeline(job_data, resume_text, user_bio):
 
     agency_name = job_data.get('OrganizationName', 'Unknown Agency')
     job_title = job_data.get('PositionTitle', 'Unknown Position')
+
+    # Limit input size to reduce free-tier token pressure
+    if resume_text:
+        resume_text = resume_text[:6000]
+    if user_bio:
+        user_bio = user_bio[:500]
 
     # Initialize agents
     jd_agent = get_jd_analyst_agent()
@@ -50,7 +92,7 @@ def run_pipeline(job_data, resume_text, user_bio):
         verbose=True,
     )
 
-    result = crew.kickoff()  # must run BEFORE reading task outputs
+    result = _kickoff_with_retry(crew)  # must run BEFORE reading task outputs
 
     # Extract key outputs (available only after kickoff)
     resume_output = str(resume_task.output or "")
