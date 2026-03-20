@@ -54,9 +54,26 @@ if "jobs" in st.session_state:
                 with st.spinner(f"Processing: {title}..."):
                     try:
                         result = run_pipeline(job_data, resume_text, user_bio)
+                        if isinstance(result, dict):
+                            resume_summary = result.get("resume_summary", "")
+                            cover_letter = result.get("cover_letter", "")
+                            outreach_message = result.get("outreach_message") or result.get("raw_result", "")
+                        else:
+                            resume_summary = ""
+                            cover_letter = ""
+                            outreach_message = str(result)
+
                         st.markdown("---")
-                        st.markdown(f"### Outreach message for: {title}")
-                        st.markdown(result)
+                        st.markdown(f"### Outputs for: {title}")
+
+                        st.markdown("#### Updated Resume Summary")
+                        st.markdown(resume_summary if resume_summary else "Not available")
+
+                        st.markdown("#### Cover Letter")
+                        st.markdown(cover_letter if cover_letter else "Not available")
+
+                        st.markdown("#### Outreach Message")
+                        st.markdown(outreach_message if outreach_message else "Not available")
                     except Exception as e:
                         st.error(f"Error processing '{title}': {e}")
                 if len(selected_indexes) > 1:

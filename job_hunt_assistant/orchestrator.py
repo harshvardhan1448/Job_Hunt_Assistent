@@ -100,12 +100,20 @@ def run_pipeline(job_data, resume_text, user_bio):
         resume_output, "<<RESUME_SUMMARY>>", "<<COVER_LETTER>>"
     )
     cover_letter = extract_between_markers(resume_output, "<<COVER_LETTER>>")
+    outreach_message = str(message_task.output or result or "")
 
     # Log and save
     log_application(job_title, agency_name, resume_summary)
     save_cover_letter_file(job_title, cover_letter)
 
-    return result
+    return {
+        "job_title": job_title,
+        "agency_name": agency_name,
+        "resume_summary": resume_summary,
+        "cover_letter": cover_letter,
+        "outreach_message": outreach_message,
+        "raw_result": str(result or ""),
+    }
 
 
 if __name__ == "__main__":
