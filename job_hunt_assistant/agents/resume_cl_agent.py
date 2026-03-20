@@ -1,13 +1,12 @@
-from crewai import Agent, Task
-from langchain_google_genai import ChatGoogleGenerativeAI
+from crewai import Agent, Task, LLM
 from utils.config import GEMINI_API_KEY
 
 
 def _get_llm():
-    return ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash-001",
+    return LLM(
+        model="gemini/gemini-1.5-flash",
+        api_key=GEMINI_API_KEY,
         temperature=0.3,
-        google_api_key=GEMINI_API_KEY,
     )
 
 

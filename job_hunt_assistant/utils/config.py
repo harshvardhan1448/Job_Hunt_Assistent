@@ -20,6 +20,12 @@ USAJOBS_API_KEY = _get_secret("USAJOBS_API_KEY")
 USAJOBS_EMAIL = _get_secret("USAJOBS_EMAIL", "your-email@example.com")
 GEMINI_API_KEY = _get_secret("GEMINI_API_KEY")
 
+if GEMINI_API_KEY:
+    if not os.getenv("GEMINI_API_KEY"):
+        os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+    if not os.getenv("GOOGLE_API_KEY"):
+        os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY
+
 # Set dummy OPENAI_API_KEY to avoid CrewAI errors if not using OpenAI
 OPENAI_API_KEY = _get_secret("OPENAI_API_KEY", "NA")
 if not os.getenv("OPENAI_API_KEY"):
