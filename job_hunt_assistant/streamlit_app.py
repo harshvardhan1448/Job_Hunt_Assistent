@@ -1,5 +1,23 @@
 """Streamlit UI for searching jobs and generating application artifacts."""
 
+# Must be set BEFORE importing CrewAI
+import os
+import signal as signal_module
+
+# Disable CrewAI telemetry
+os.environ['CREWAI_TELEMETRY_OPT_OUT'] = 'true'
+
+# Patch signal.signal to catch main-thread-only errors
+_original_signal = signal_module.signal
+def _safe_signal(sig, handler):
+    try:
+        return _original_signal(sig, handler)
+    except ValueError as e:
+        if "main thread" in str(e):
+            return None
+        raise
+signal_module.signal = _safe_signal
+
 import streamlit as st
 import time
 from orchestrator import run_pipeline
@@ -71,15 +89,35 @@ if "jobs" in st.session_state:
                         st.markdown(f"### Outputs for: {title}")
 
                         st.markdown("#### Updated Resume Summary")
-                        st.markdown(resume_summary if resume_summary else "Not available")
+                        if resume_summary and resume_summary != "Not found":
+                            st.markdown(resume_summary)
+                        else:
+                            st.info("Resume summary could not be generated. Check that the job description was processed correctly.")
 
                         st.markdown("#### Cover Letter")
-                        st.markdown(cover_letter if cover_letter else "Not available")
+                        if cover_letter and cover_letter != "Not found":
+                            st.markdown(cover_letter)
+                        else:
+                            st.info("Cover letter could not be generated. This may require manual editing.")
 
                         st.markdown("#### Outreach Message")
-                        st.markdown(outreach_message if outreach_message else "Not available")
+                        if outreach_message and outreach_message.strip():
+                            st.markdown(outreach_message)
+                        else:
+                            st.info("Outreach message could not be generated.")
                     except Exception as e:
-                        st.error(f"Error processing '{title}': {e}")
+                        error_text = str(e)
+                        # Provide user-friendly error messages
+                        if "504" in error_text or "gateway" in error_text.lower():
+                            st.warning(f"⏳ HuggingFace API temporarily overloaded. Retrying in the background... Job: {title}")
+                        elif "429" in error_text or "rate" in error_text.lower():
+                            st.warning(f"⏳ Rate limit hit. Waiting before retry... Job: {title}")
+                        elif "401" in error_text or "unauthorized" in error_text.lower():
+                            st.error(f"❌ Authentication error. Please check your API keys in .env. Job: {title}")
+                        else:
+                            # Show brief error without HTML dump
+                            brief_error = error_text[:200] if len(error_text) > 200 else error_text
+                            st.error(f"❌ Error processing '{title}': {brief_error}")
                 if len(selected_indexes) > 1:
                     # Gentle cooldown to reduce burst requests on free-tier quotas.
                     time.sleep(8)

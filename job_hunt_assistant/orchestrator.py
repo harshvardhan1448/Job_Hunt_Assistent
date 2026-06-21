@@ -1,6 +1,22 @@
 """Pipeline orchestration for multi-agent job application generation."""
 
+# Must be set BEFORE importing CrewAI
 import os
+import signal as signal_module
+
+os.environ['CREWAI_TELEMETRY_OPT_OUT'] = 'true'
+
+# Patch signal.signal to catch main-thread-only errors
+_original_signal = signal_module.signal
+def _safe_signal(sig, handler):
+    try:
+        return _original_signal(sig, handler)
+    except ValueError as e:
+        if "main thread" in str(e):
+            return None
+        raise
+signal_module.signal = _safe_signal
+
 import re
 import time
 from crewai import Crew, Process
@@ -19,12 +35,23 @@ def load_resume(path="data/sample_resume.txt"):
 
 def extract_between_markers(text, start, end=None):
     """Extract text between two marker strings."""
+    if not text:
+        return "Not found"
+    
+    text = str(text)
     try:
         start_idx = text.index(start) + len(start)
         end_idx = text.index(end, start_idx) if end else len(text)
         return text[start_idx:end_idx].strip()
     except ValueError:
-        return "Not found"
+        # Try alternative markers without angle brackets
+        alt_start = start.replace("<<", "").replace(">>", "").strip()
+        try:
+            start_idx = text.lower().index(alt_start.lower()) + len(alt_start)
+            end_idx = text.index(end.replace("<<", "").replace(">>", "").strip(), start_idx) if end else len(text)
+            return text[start_idx:end_idx].strip()
+        except ValueError:
+            return "Not found"
 
 
 def _parse_retry_delay(error_text, default_seconds=30):
@@ -43,25 +70,32 @@ def _parse_retry_delay(error_text, default_seconds=30):
     return default_seconds
 
 
-def _kickoff_with_retry(crew, max_retries=2):
-    """Run crew kickoff with simple retry behavior for transient quota errors."""
+def _kickoff_with_retry(crew, max_retries=3):
+    """Run crew kickoff with retry behavior for transient errors (rate limits, 504, etc.)."""
     attempt = 0
+    base_wait = 15
+    
     while True:
         try:
             return crew.kickoff()
         except Exception as exc:
-            error_text = str(exc)
-            is_rate_limit = any(
-                token in error_text.lower()
-                for token in ["ratelimit", "resource_exhausted", "quota", "429"]
-            )
-            if (not is_rate_limit) or attempt >= max_retries:
-                raise
-
-            # Respect provider-suggested backoff (when present) before retrying.
-            wait_seconds = _parse_retry_delay(error_text, default_seconds=30)
-            time.sleep(wait_seconds)
+            error_text = str(exc).lower()
             attempt += 1
+            
+            # Check for transient errors (rate limit, quota, server errors)
+            is_transient = any(
+                token in error_text
+                for token in ["ratelimit", "resource_exhausted", "quota", "429", "504", "gateway", "timeout", "temporarily"]
+            )
+            
+            if not is_transient or attempt >= max_retries:
+                print(f"❌ Non-transient error or max retries reached: {error_text[:200]}")
+                raise
+            
+            # Exponential backoff: 15s, 30s, 60s
+            wait_seconds = base_wait * (2 ** (attempt - 1))
+            print(f"⏳ Transient error (attempt {attempt}/{max_retries}). Waiting {wait_seconds}s before retry...")
+            time.sleep(wait_seconds)
 
 
 def run_pipeline(job_data, resume_text, user_bio):
@@ -108,14 +142,42 @@ def run_pipeline(job_data, resume_text, user_bio):
         verbose=True,
     )
 
-    result = _kickoff_with_retry(crew)  # must run BEFORE reading task outputs
+    try:
+        result = _kickoff_with_retry(crew)  # must run BEFORE reading task outputs
+    except Exception as e:
+        error_msg = str(e)
+        print(f"\n❌ Crew execution failed: {error_msg}\n")
+        if "invalid request" in error_msg.lower():
+            print("💡 Tip: This might be a request size issue. Job summary or resume may be too long.")
+        if "401" in error_msg or "unauthorized" in error_msg.lower():
+            print("💡 Tip: Check your HF_API_KEY and HF_MODEL in .env file")
+        raise
 
     # Extract key outputs (available only after kickoff)
     resume_output = str(resume_task.output or "")
+    
+    # If task output is empty, try reading from output file
+    if not resume_output or resume_output.strip() == "" or "Not found" in resume_output:
+        try:
+            with open("data/resume_agent_output.txt", "r", encoding="utf-8") as f:
+                resume_output = f.read()
+        except FileNotFoundError:
+            pass
+    
     resume_summary = extract_between_markers(
         resume_output, "<<RESUME_SUMMARY>>", "<<COVER_LETTER>>"
     )
     cover_letter = extract_between_markers(resume_output, "<<COVER_LETTER>>")
+    
+    # If still not found, try to use first half as summary, second half as letter
+    if resume_summary == "Not found" and resume_output and len(resume_output) > 100:
+        mid = len(resume_output) // 2
+        resume_summary = resume_output[:mid].strip()[:500]  # First 500 chars
+    
+    if cover_letter == "Not found" and resume_output and len(resume_output) > 100:
+        mid = len(resume_output) // 2
+        cover_letter = resume_output[mid:].strip()
+    
     outreach_message = str(message_task.output or result or "")
 
     # Log and save

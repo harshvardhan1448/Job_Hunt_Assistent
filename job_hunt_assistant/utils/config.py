@@ -36,15 +36,13 @@ def _get_secret(key, default=None):
 
 USAJOBS_API_KEY = _get_secret("USAJOBS_API_KEY")
 USAJOBS_EMAIL = _get_secret("USAJOBS_EMAIL", "your-email@example.com")
-GEMINI_API_KEY = _get_secret("GEMINI_API_KEY")
-GEMINI_MODEL = _get_secret("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+HF_API_KEY = _get_secret("HF_API_KEY")
+HF_MODEL = _get_secret("HF_MODEL", "huggingface/meta-llama/Llama-3.1-8B-Instruct")
 
-# Mirror Gemini key names expected by different SDK/provider layers.
-if GEMINI_API_KEY:
-    if not os.getenv("GEMINI_API_KEY"):
-        os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
-    if not os.getenv("GOOGLE_API_KEY"):
-        os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY
+# Set Hugging Face API key for LangChain
+if HF_API_KEY:
+    if not os.getenv("HUGGINGFACEHUB_API_TOKEN"):
+        os.environ["HUGGINGFACEHUB_API_TOKEN"] = HF_API_KEY
 
 # Set dummy OPENAI_API_KEY to avoid CrewAI errors if not using OpenAI
 OPENAI_API_KEY = _get_secret("OPENAI_API_KEY", "NA")

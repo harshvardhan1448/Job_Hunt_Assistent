@@ -1,14 +1,30 @@
 """JD Analyst agent and task definitions."""
 
+import os
+import signal as signal_module
+
+os.environ['CREWAI_TELEMETRY_OPT_OUT'] = 'true'
+
+# Patch signal.signal to catch main-thread-only errors
+_original_signal = signal_module.signal
+def _safe_signal(sig, handler):
+    try:
+        return _original_signal(sig, handler)
+    except ValueError as e:
+        if "main thread" in str(e):
+            return None
+        raise
+signal_module.signal = _safe_signal
+
 from crewai import Agent, Task, LLM
-from utils.config import GEMINI_API_KEY, GEMINI_MODEL
+from utils.config import HF_API_KEY, HF_MODEL
 
 
 def _get_llm():
     """Build the LLM configuration used by the JD analyst."""
     return LLM(
-        model=GEMINI_MODEL,
-        api_key=GEMINI_API_KEY,
+        model=HF_MODEL,
+        api_key=HF_API_KEY,
         temperature=0.2,
     )
 
@@ -31,15 +47,21 @@ def create_jd_analysis_task(agent, job_description):
         agent: CrewAI agent responsible for analysis.
         job_description: Raw job summary text from USAJobs.
     """
+    # Truncate job description to avoid token limits (keep first 2500 chars)
+    truncated_description = job_description[:2500] if job_description else "No job description provided"
+    
     return Task(
-        description=f"""
-        Analyze the following USAJobs job posting and extract:
-        - A summary of the role
-        - Key skills required
-        - Any specific qualifications or eligibility
-        \n\nJob Description:\n{job_description}
-        """,
-        expected_output="A structured markdown summary containing sections for Qualifications, Required Skills, and Responsibilities.",
+        description=f"""Analyze this USAJobs job posting and extract key information in structured format:
+
+Job Description:
+{truncated_description}...
+
+Provide a structured analysis with these sections:
+- ROLE SUMMARY
+- KEY SKILLS REQUIRED
+- QUALIFICATIONS AND ELIGIBILITY
+- RESPONSIBILITIES""",
+        expected_output="Structured analysis with clear sections for Role Summary, Key Skills, Qualifications, and Responsibilities",
         agent=agent,
         output_file="data/report.md",
     )

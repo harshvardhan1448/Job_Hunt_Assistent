@@ -1,8 +1,8 @@
-# Python byte‑code
+﻿# Python byte-code
 __pycache__/
 *.py[cod]
 
-# Virtual‑environment folders
+# Virtual-environment folders
 venv/
 env/
 .venv/
@@ -13,7 +13,7 @@ env/
 .env.example
 *.env.example
 
-# OS‑specific files
+# OS-specific files
 Thumbs.db
 .DS_Store
 
