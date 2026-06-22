@@ -1,18 +1,20 @@
+I now can give a great answer
+
 <<RESUME_SUMMARY>>
-As a highly motivated and detail-driven professional with a strong background in data analysis and business solutions development, I am excited to apply for the Management and Program Analyst position in the Program Analysis and Evaluation (PAE) office. With a solid understanding of program management principles and a proven track record of developing business solutions that maximize support to projects, I am confident in my ability to provide analysis and reports to stakeholders and promote optimal construction program management. My experience in analyzing and evaluating data to identify trends and patterns, as well as my expertise in developing and implementing business solutions, make me an ideal candidate for this role. I am eager to bring my skills and experience to a dynamic team and contribute to the success of the VHA, NCA, and VBA projects.
+As a detail-driven and analytical professional with experience in AI engineering and research, I am excited to apply for the Management and Program Analyst position in the Office of Resource Management. With a strong background in developing business solutions and analyzing technical specifications data, I am confident in my ability to maximize support to VHA, NCA, and VBA projects. My experience with AI-powered autoparser systems, CNN models, and transfer learning has equipped me with the skills to provide high-quality analysis and reports to CFM, NCA, and VHA. I am eager to leverage my technical expertise to promote optimal construction program management and drive business success.
 
 <<COVER_LETTER>>
 Dear Hiring Manager,
 
-I am writing to express my strong interest in the Management and Program Analyst position in the Program Analysis and Evaluation (PAE) office. As a highly motivated and detail-driven professional with a strong background in data analysis and business solutions development, I am confident that I possess the skills and experience necessary to excel in this role.
+I am writing to express my strong interest in the Management and Program Analyst position in the Office of Resource Management. With a passion for developing business solutions and analyzing complex data, I am confident that my skills and experience make me an ideal candidate for this role.
 
-With a solid understanding of program management principles and a proven track record of developing business solutions that maximize support to projects, I am well-positioned to provide analysis and reports to stakeholders and promote optimal construction program management. My experience in analyzing and evaluating data to identify trends and patterns, as well as my expertise in developing and implementing business solutions, make me an ideal candidate for this position.
+As a detail-driven and analytical professional, I have a proven track record of developing AI-powered solutions that drive business success. In my previous role as an AI Engineer Intern at SCALULAR, I designed and deployed an AI-powered autoparser system that reduced manual processing time by 25%. I also have experience with CNN models and transfer learning, which I leveraged to achieve 99% accuracy in a research project at Bennett University.
 
-I am particularly drawn to this role because of the opportunity to work in a dynamic team and contribute to the success of the VHA, NCA, and VBA projects. I am impressed by the organization's commitment to promoting optimal construction program management and its focus on developing business solutions that align with business needs.
+I am particularly drawn to this role because of the opportunity to apply my technical expertise to promote optimal construction program management. I am impressed by the Office of Resource Management's commitment to developing business solutions that maximize support to VHA, NCA, and VBA projects, and I am excited about the prospect of contributing to this mission.
 
-In addition to my technical skills and experience, I possess excellent communication and collaboration skills, which I believe are essential for success in this role. I am a strong team player who is able to work effectively with stakeholders to develop and implement business solutions.
+In addition to my technical skills, I possess excellent communication and collaboration skills, which I have demonstrated through my experience working with cross-functional teams and collaborating with stakeholders. I am confident that my ability to work effectively with others will enable me to provide high-quality analysis and reports to CFM, NCA, and VHA.
 
-Thank you for considering my application. I would welcome the opportunity to discuss my qualifications further and explain in greater detail why I am the ideal candidate for this position.
+Thank you for considering my application. I would welcome the opportunity to discuss my qualifications further and explain in greater detail why I am the ideal candidate for this role.
 
 Sincerely,
 Rajput Harshvardhan
