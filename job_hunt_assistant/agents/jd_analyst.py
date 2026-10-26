@@ -33,8 +33,12 @@ def get_jd_analyst_agent():
     """Create and return the JD analysis agent."""
     return Agent(
         role="JD Analyst",
-        goal="Understand and summarize government job postings",
-        backstory="You're an expert in job market analysis with a focus on US federal job listings.",
+        goal="Understand and summarize job postings from any industry",
+        backstory=(
+            "You are an expert in job market analysis with deep knowledge of "
+            "industry roles across tech, finance, healthcare, and more. "
+            "You help job seekers understand what employers are looking for."
+        ),
         llm=_get_llm(),
         verbose=True,
     )
@@ -45,13 +49,13 @@ def create_jd_analysis_task(agent, job_description):
 
     Args:
         agent: CrewAI agent responsible for analysis.
-        job_description: Raw job summary text from USAJobs.
+        job_description: Raw job description text from the job posting.
     """
     # Truncate job description to avoid token limits (keep first 2500 chars)
     truncated_description = job_description[:2500] if job_description else "No job description provided"
-    
+
     return Task(
-        description=f"""Analyze this USAJobs job posting and extract key information in structured format:
+        description=f"""Analyze this job posting and extract key information in structured format:
 
 Job Description:
 {truncated_description}...
@@ -59,7 +63,7 @@ Job Description:
 Provide a structured analysis with these sections:
 - ROLE SUMMARY
 - KEY SKILLS REQUIRED
-- QUALIFICATIONS AND ELIGIBILITY
+- QUALIFICATIONS AND EXPERIENCE
 - RESPONSIBILITIES""",
         expected_output="Structured analysis with clear sections for Role Summary, Key Skills, Qualifications, and Responsibilities",
         agent=agent,
