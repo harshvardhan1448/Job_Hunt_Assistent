@@ -34,7 +34,11 @@ def get_messaging_agent():
     return Agent(
         role="Outreach Message Writer",
         goal="Draft personalized messages for job outreach",
-        backstory="You're a professional career coach skilled in writing effective cold emails and outreach messages for job seekers in tech and government.",
+        backstory=(
+            "You are a professional career coach skilled in writing effective "
+            "cold emails and LinkedIn outreach messages for job seekers across "
+            "all industries. You craft concise, genuine messages that stand out."
+        ),
         llm=_get_llm(),
         verbose=True,
     )
@@ -43,33 +47,33 @@ def get_messaging_agent():
 def create_messaging_task(
     agent,
     job_summary,
-    agency_name,
-    user_bio="I'm a data professional passionate about public service.",
+    company_name,
+    user_bio="I'm a professional looking for my next challenge.",
 ):
     """Create a task that drafts a short outreach message.
 
     Args:
         agent: CrewAI agent handling outreach writing.
         job_summary: Summary of the target role.
-        agency_name: Hiring agency/organization name.
+        company_name: Hiring company name.
         user_bio: Candidate bio used to personalize tone.
     """
     # Truncate inputs to avoid token limits
     truncated_summary = job_summary[:1500] if job_summary else "No job summary"
-    truncated_bio = user_bio[:300] if user_bio else "Data professional"
-    
-    return Task(
-        description=f"""Draft a personalized outreach message for {agency_name} expressing interest in this position.
+    truncated_bio = user_bio[:300] if user_bio else "Professional job seeker"
 
-Agency: {agency_name}
+    return Task(
+        description=f"""Draft a personalized outreach message for {company_name} expressing interest in this position.
+
+Company: {company_name}
 Job Summary: {truncated_summary}...
 Candidate Background: {truncated_bio}
 
 Write a professional, friendly outreach message under 150 words suitable for LinkedIn or email that:
-- Expresses genuine interest in the role
-- Highlights relevant experience
-- Shows knowledge of the agency/position
-- Includes a call to action""",
+- Expresses genuine interest in the role and company
+- Highlights the most relevant experience from the candidate's background
+- Shows knowledge of what the company/role is about
+- Includes a clear call to action""",
         expected_output="A professional outreach message under 150 words suitable for LinkedIn or email",
         agent=agent,
     )

@@ -34,7 +34,12 @@ def get_resume_cl_agent():
     return Agent(
         role="Resume & Cover Letter Writer",
         goal="Customize application materials to match job descriptions",
-        backstory="You're an expert in professional writing and tailoring resumes for job applications, especially in government and tech roles.",
+        backstory=(
+            "You are an expert professional writer specializing in tailoring "
+            "resumes and cover letters for job applications across industries. "
+            "You only use information from the candidate's actual resume — "
+            "you never invent skills, employers, or achievements."
+        ),
         llm=_get_llm(),
         verbose=True,
     )
@@ -43,19 +48,30 @@ def get_resume_cl_agent():
 def create_resume_cl_task(agent, job_summary, resume_text):
     """Create a task that generates resume summary and cover letter.
 
+    The prompt instructs the LLM to produce structured output using
+    ``<<RESUME_SUMMARY>>`` and ``<<COVER_LETTER>>`` markers, which are
+    parsed by ``orchestrator._parse_structured_output``.
+
+    IMPORTANT: The agent must only reword and reorder content that already
+    exists in the candidate's resume — it must never invent skills, employers,
+    job titles, dates, or metrics.
+
     Args:
         agent: CrewAI agent that writes resume artifacts.
         job_summary: Job context extracted from the posting.
         resume_text: Candidate's current resume text.
     """
-    # Truncate job summary to first 3000 chars to avoid token limits
+    # Truncate to avoid token limits
     truncated_job_summary = job_summary[:3000] if job_summary else "No summary available"
-    
-    # Truncate resume to first 2000 chars
     truncated_resume = resume_text[:2000] if resume_text else "No resume provided"
-    
+
     return Task(
-        description=f"""You MUST generate output in the exact format below with the markers.
+        description=f"""You MUST generate output in the exact format below using the exact markers.
+
+CRITICAL RULES:
+- Only reword and reorder content that already exists in the candidate's resume.
+- NEVER invent skills, employers, job titles, dates, numbers, or achievements.
+- Write in a professional, confident tone suited for any industry.
 
 Job Summary: {truncated_job_summary}...
 
@@ -63,7 +79,7 @@ Resume: {truncated_resume}...
 
 TASKS:
 1. Create a 3-5 sentence tailored professional resume summary based on the job
-2. Create a personalized cover letter for this government position
+2. Create a personalized cover letter for this position at this company
 
 OUTPUT FORMAT (use these exact markers):
 <<RESUME_SUMMARY>>

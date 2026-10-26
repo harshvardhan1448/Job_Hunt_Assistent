@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "job_id": "fixture-data-analyst-001",
+      "job_title": "Data Analyst",
+      "employer_name": "Example Analytics Ltd",
+      "job_city": "Bengaluru",
+      "job_state": "Karnataka",
+      "job_country": "IN",
+      "job_is_remote": false,
+      "job_description": "Analyze business data using Python and SQL.",
+      "job_apply_link": "https://example.com/jobs/data-analyst",
+      "job_publisher": "Example Jobs",
+      "job_posted_at_datetime_utc": "2026-10-20T00:00:00Z",
+      "job_employment_type": "FULLTIME",
+      "job_required_skills": ["Python", "SQL"],
+      "job_required_experience": {},
+      "job_highlights": {}
+    }
+  ]
+}

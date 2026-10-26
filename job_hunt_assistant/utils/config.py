@@ -34,8 +34,7 @@ def _get_secret(key, default=None):
     return default
 
 
-USAJOBS_API_KEY = _get_secret("USAJOBS_API_KEY")
-USAJOBS_EMAIL = _get_secret("USAJOBS_EMAIL", "your-email@example.com")
+JSEARCH_API_KEY = _get_secret("JSEARCH_API_KEY")
 HF_API_KEY = _get_secret("HF_API_KEY")
 HF_MODEL = _get_secret("HF_MODEL", "huggingface/meta-llama/Llama-3.1-8B-Instruct")
 

@@ -1,10 +1,20 @@
-"""Streamlit UI for searching jobs and generating application artifacts."""
+"""Streamlit UI for the AI Job Hunt Assistant.
+
+Flow
+----
+1. Upload (or paste) resume  →  profile extracted and shown in editable fields
+2. Set location / filters    →  Search Jobs
+3. Ranked job cards          →  Apply button (external link) or Tailor button
+4. Tailoring pipeline runs   →  Download DOCX or view in-app
+
+All heavy state (jobs, profile, results) is kept in ``st.session_state`` so
+that widget interactions don't re-trigger searches.
+"""
 
 # Must be set BEFORE importing CrewAI
 import os
 import signal as signal_module
 
-# Disable CrewAI telemetry
 os.environ['CREWAI_TELEMETRY_OPT_OUT'] = 'true'
 
 # Patch signal.signal to catch main-thread-only errors
@@ -18,106 +28,351 @@ def _safe_signal(sig, handler):
         raise
 signal_module.signal = _safe_signal
 
-import streamlit as st
 import time
+import streamlit as st
+
+from utils.resume_parser import parse_resume, extract_profile_from_resume, Profile, sanitize_titles
+from services.search import search_jobs_with_details, search_with_fallback
+from services.matcher import rank_jobs
 from orchestrator import run_pipeline
-from usajobs_api import fetch_usajobs
+from utils.validator import validate_tailored_resume
+from utils.exporter import build_resume_docx
 
-st.set_page_config(page_title="AI Job Hunt Assistant", layout="centered")
+# ── Page config ──────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="AI Job Hunt Assistant",
+    page_icon="💼",
+    layout="wide",
+)
 
-st.title("AI Job Hunt Assistant")
-st.markdown("Use AI agents to analyze jobs, tailor your resume, and write outreach messages — all from one interface.")
+# ── CSS polish ───────────────────────────────────────────────────────────────
+st.markdown(
+    """
+    <style>
+    .job-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .score-badge { background: #1a56db; color: white; border-radius: 4px; padding: 2px 8px; font-size: 13px; }
+    .skill-match { color: #057a55; font-weight: 600; }
+    .skill-missing { color: #c81e1e; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Input fields
-keyword = st.text_input("Job Keyword", "business analyst")
-location = st.text_input("Location", "New York")
-resume_text = st.text_area("Paste Your Resume", height=200)
-user_bio = st.text_area("Short Bio (for outreach tone)", "I’m a data professional passionate about public service.")
+# ── Title ─────────────────────────────────────────────────────────────────────
+st.title("💼 AI Job Hunt Assistant")
+st.markdown(
+    "Upload your resume, set your location, and let AI find, rank, and tailor applications — "
+    "all powered by [JSearch](https://app.openwebninja.com/api/jsearch) (LinkedIn, Indeed, Glassdoor & more)."
+)
 
-# Step 1: Search Jobs
-if st.button("Search Jobs"):
+# ─────────────────────────────────────────────────────────────────────────────
+# SIDEBAR — configuration
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.header("⚙️ Settings")
+    location = st.text_input("Location (city, country, or 'remote')", "Bangalore, India")
+    country_code = st.text_input("Country code (ISO-2)", "in")
+    date_posted = st.selectbox(
+        "Date posted",
+        options=["week", "today", "3days", "month"],
+        index=0,
+    )
+    max_results_display = st.slider("Max jobs to display", 5, 50, 20)
+
+    st.divider()
+    st.subheader("🔧 Scoring weights")
+    weight_sim = st.slider("Embedding similarity weight", 0.0, 1.0, 0.6, 0.05)
+    weight_skill = st.slider("Skill overlap weight", 0.0, 1.0, 0.4, 0.05)
+
+    st.divider()
+    st.markdown("**JSearch API key** — get yours free at [openwebninja.com](https://app.openwebninja.com/api/jsearch)")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1 — Resume upload / paste
+# ─────────────────────────────────────────────────────────────────────────────
+st.header("Step 1 — Your Resume")
+
+col_upload, col_paste = st.columns([1, 1])
+with col_upload:
+    uploaded_file = st.file_uploader("Upload PDF or DOCX", type=["pdf", "docx"])
+with col_paste:
+    pasted_resume = st.text_area("Or paste plain text", height=200, placeholder="Paste your resume here…")
+
+resume_text: str = ""
+if uploaded_file is not None:
     try:
-        with st.spinner("Searching USAJobs..."):
-            job_posts = fetch_usajobs(keyword, location, results_per_page=5)
-        if not job_posts:
-            st.error("No job postings found for this search.")
-        else:
-            st.session_state["jobs"] = job_posts
-            st.success(f"Found {len(job_posts)} jobs! Select the ones you'd like to apply for.")
-    except Exception as e:
-        st.error(f"Failed to fetch jobs: {e}")
+        resume_text = parse_resume(uploaded_file=uploaded_file)
+        st.success(f"✅ Parsed {uploaded_file.name} ({len(resume_text):,} characters)")
+    except Exception as exc:
+        st.error(f"Failed to parse resume: {exc}")
+elif pasted_resume.strip():
+    resume_text = pasted_resume.strip()
 
-# Step 2: Show checkbox list for job selection
-if "jobs" in st.session_state:
-    selected_indexes = []
-    st.markdown("### Select Jobs to Apply For:")
-    for i, job in enumerate(st.session_state["jobs"]):
-        # USAJobs wraps the useful fields inside MatchedObjectDescriptor.
-        job_data = job['MatchedObjectDescriptor']
-        title = job_data.get('PositionTitle', 'Unknown Title')
-        org = job_data.get('OrganizationName', 'Unknown Agency')
-        checkbox = st.checkbox(f"{title} — {org}", key=f"job_{i}")
-        if checkbox:
-            selected_indexes.append(i)
+# ── User bio for outreach personalization ────────────────────────────────────
+user_bio = st.text_area(
+    "Short bio (for outreach tone — 1-2 sentences about you)",
+    value="I'm a data professional with experience in analytics and software engineering, "
+          "looking for my next challenge in a growth-oriented company.",
+    height=80,
+)
 
-    # Step 3: Apply to selected jobs
-    if st.button("Apply to Selected Jobs"):
-        if not selected_indexes:
-            st.warning("Please select at least one job.")
-        elif not resume_text.strip():
-            st.warning("Please paste your resume before applying.")
-        else:
-            if len(selected_indexes) > 1:
-                st.info("Multiple jobs selected. Processing one-by-one with cooldown to avoid API rate limits.")
-            for i in selected_indexes:
-                job_data = st.session_state["jobs"][i]['MatchedObjectDescriptor']
-                title = job_data.get('PositionTitle', 'Unknown')
-                with st.spinner(f"Processing: {title}..."):
-                    try:
-                        # Pipeline returns a structured dict with generated artifacts.
-                        result = run_pipeline(job_data, resume_text, user_bio)
-                        if isinstance(result, dict):
-                            resume_summary = result.get("resume_summary", "")
-                            cover_letter = result.get("cover_letter", "")
-                            outreach_message = result.get("outreach_message") or result.get("raw_result", "")
-                        else:
-                            resume_summary = ""
-                            cover_letter = ""
-                            outreach_message = str(result)
+# ── Profile extraction ───────────────────────────────────────────────────────
+if resume_text and "profile" not in st.session_state:
+    with st.spinner("🤖 Extracting profile from resume…"):
+        try:
+            st.session_state["profile"] = extract_profile_from_resume(resume_text)
+        except Exception as exc:
+            st.warning(f"Auto-extraction failed: {exc}. Using blank profile.")
+            st.session_state["profile"] = Profile()
 
-                        st.markdown("---")
-                        st.markdown(f"### Outputs for: {title}")
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2 — Review and edit extracted profile
+# ─────────────────────────────────────────────────────────────────────────────
+st.header("Step 2 — Review Your Profile")
+st.caption("AI extracted these from your resume. Edit before searching.")
 
-                        st.markdown("#### Updated Resume Summary")
-                        if resume_summary and resume_summary != "Not found":
-                            st.markdown(resume_summary)
-                        else:
-                            st.info("Resume summary could not be generated. Check that the job description was processed correctly.")
+profile: Profile = st.session_state.get("profile", Profile())
 
-                        st.markdown("#### Cover Letter")
-                        if cover_letter and cover_letter != "Not found":
-                            st.markdown(cover_letter)
-                        else:
-                            st.info("Cover letter could not be generated. This may require manual editing.")
+col1, col2 = st.columns(2)
+with col1:
+    raw_titles = st.text_area(
+        "Target job titles (one per line)",
+        value="\n".join(profile.target_titles) if profile.target_titles else "",
+        height=120,
+    )
+    raw_locations = st.text_area(
+        "Preferred locations (one per line)",
+        value="\n".join(profile.preferred_locations) if profile.preferred_locations else "",
+        height=80,
+    )
+with col2:
+    raw_skills = st.text_area(
+        "Your skills (one per line)",
+        value="\n".join(profile.skills) if profile.skills else "",
+        height=140,
+    )
+    years_exp = st.number_input(
+        "Years of experience",
+        min_value=0.0,
+        max_value=50.0,
+        value=float(profile.years_experience),
+        step=0.5,
+    )
 
-                        st.markdown("#### Outreach Message")
-                        if outreach_message and outreach_message.strip():
-                            st.markdown(outreach_message)
-                        else:
-                            st.info("Outreach message could not be generated.")
-                    except Exception as e:
-                        error_text = str(e)
-                        # Provide user-friendly error messages
-                        if "504" in error_text or "gateway" in error_text.lower():
-                            st.warning(f"⏳ HuggingFace API temporarily overloaded. Retrying in the background... Job: {title}")
-                        elif "429" in error_text or "rate" in error_text.lower():
-                            st.warning(f"⏳ Rate limit hit. Waiting before retry... Job: {title}")
-                        elif "401" in error_text or "unauthorized" in error_text.lower():
-                            st.error(f"❌ Authentication error. Please check your API keys in .env. Job: {title}")
-                        else:
-                            # Show brief error without HTML dump
-                            brief_error = error_text[:200] if len(error_text) > 200 else error_text
-                            st.error(f"❌ Error processing '{title}': {brief_error}")
-                if len(selected_indexes) > 1:
-                    # Gentle cooldown to reduce burst requests on free-tier quotas.
-                    time.sleep(8)
+# Rebuild profile from edited fields
+edited_profile = Profile(
+    target_titles=sanitize_titles([t.strip() for t in raw_titles.splitlines() if t.strip()]),
+    skills=[s.strip() for s in raw_skills.splitlines() if s.strip()],
+    years_experience=years_exp,
+    preferred_locations=[p.strip() for p in raw_locations.splitlines() if p.strip()],
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 3 — Search
+# ─────────────────────────────────────────────────────────────────────────────
+st.header("Step 3 — Search & Rank Jobs")
+
+search_col, clear_col = st.columns([3, 1])
+with search_col:
+    do_search = st.button("🔍 Search Jobs", type="primary", disabled=not resume_text)
+with clear_col:
+    if st.button("🗑 Clear results"):
+        for key in ["jobs", "ranked_jobs", "pipeline_results"]:
+            st.session_state.pop(key, None)
+        # Also remove cached API responses, including an empty result from a previous key.
+        search_with_fallback.clear()
+        st.rerun()
+
+if not resume_text:
+    st.info("Upload or paste your resume first.")
+
+if do_search:
+    with st.spinner("Searching across LinkedIn, Indeed, Glassdoor and more…"):
+        try:
+            raw_jobs, search_errors, search_counts = search_jobs_with_details(
+                profile=edited_profile,
+                location=location,
+                country=country_code,
+                date_posted=date_posted,
+            )
+            with st.expander("Search details"):
+                st.write("Queries and results:", search_counts)
+            if not raw_jobs:
+                if search_errors:
+                    st.error("\n\n".join(search_errors))
+                else:
+                    st.warning("No jobs found. Try a broader title or set Date posted to 'month'.")
+            else:
+                ranked = rank_jobs(
+                    jobs=raw_jobs,
+                    profile=edited_profile,
+                    resume_text=resume_text,
+                    location_query=location,
+                    weight_sim=weight_sim,
+                    weight_skill=weight_skill,
+                )
+                st.session_state["jobs"] = raw_jobs
+                st.session_state["ranked_jobs"] = ranked
+                st.session_state.pop("pipeline_results", None)
+                st.success(f"Found **{len(raw_jobs)}** jobs → ranked **{len(ranked)}** after filtering.")
+        except ValueError as exc:
+            # Missing API key
+            st.error(f"❌ Configuration error: {exc}")
+        except Exception as exc:
+            error_text = str(exc)
+            if "429" in error_text or "quota" in error_text.lower():
+                st.error(
+                    "⏳ JSearch quota exceeded (HTTP 429). "
+                    "Wait a minute and try again, or upgrade your plan."
+                )
+            else:
+                st.error(f"Search failed: {error_text[:300]}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4 — Job cards
+# ─────────────────────────────────────────────────────────────────────────────
+if "ranked_jobs" in st.session_state:
+    ranked_jobs: list[dict] = st.session_state["ranked_jobs"][:max_results_display]
+    pipeline_results: dict = st.session_state.get("pipeline_results", {})
+
+    st.markdown(f"### Showing top {len(ranked_jobs)} results")
+
+    for idx, job in enumerate(ranked_jobs):
+        title = job.get("title", "Unknown Title")
+        company = job.get("company", "Unknown Company")
+        loc = job.get("location", "")
+        remote = job.get("remote", False)
+        score = job.get("score", 0.0)
+        apply_url = job.get("apply_url", "")
+        matched = job.get("matched_skills", [])
+        missing = job.get("missing_skills", [])
+        source = job.get("source", "")
+        posted_at = (job.get("posted_at") or "")[:10]  # date only
+
+        with st.container():
+            # ── Card header ──────────────────────────────────────────────────
+            h_col, score_col = st.columns([5, 1])
+            with h_col:
+                st.markdown(f"#### {title}")
+                loc_display = f"🌐 Remote" if remote else f"📍 {loc}" if loc else ""
+                st.markdown(f"**{company}** &nbsp; {loc_display} &nbsp; {f'({source})' if source else ''}")
+                if posted_at:
+                    st.caption(f"Posted: {posted_at}")
+            with score_col:
+                pct = int(score * 100)
+                color = "#057a55" if pct >= 60 else "#e3a008" if pct >= 40 else "#c81e1e"
+                st.markdown(
+                    f"<div style='text-align:center; background:{color}; color:white; "
+                    f"border-radius:8px; padding:8px; font-size:20px; font-weight:700'>"
+                    f"{pct}%</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ── Skills ───────────────────────────────────────────────────────
+            if matched:
+                st.markdown(
+                    "✅ **Matched:** " + " &nbsp;·&nbsp; ".join(f"`{s}`" for s in matched[:8])
+                )
+            if missing:
+                st.markdown(
+                    "❌ **Missing:** " + " &nbsp;·&nbsp; ".join(f"`{s}`" for s in missing[:8])
+                )
+
+            # ── Description preview ──────────────────────────────────────────
+            with st.expander("📄 Description preview"):
+                st.write((job.get("description") or "")[:800] + "…")
+
+            # ── Buttons ──────────────────────────────────────────────────────
+            btn_col1, btn_col2 = st.columns([1, 1])
+            with btn_col1:
+                if apply_url:
+                    st.link_button("🚀 Apply (opens job site)", apply_url, use_container_width=True)
+                else:
+                    st.button("No apply link", disabled=True, key=f"no_apply_{idx}", use_container_width=True)
+
+            with btn_col2:
+                tailor_key = f"tailor_{idx}"
+                if st.button("✍️ Tailor my resume", key=tailor_key, use_container_width=True):
+                    if not resume_text.strip():
+                        st.warning("Please upload or paste your resume first.")
+                    else:
+                        with st.spinner(f"Running AI pipeline for: {title}…"):
+                            try:
+                                result = run_pipeline(job, resume_text, user_bio)
+                                pipeline_results[idx] = result
+                                st.session_state["pipeline_results"] = pipeline_results
+                            except Exception as exc:
+                                error_text = str(exc)
+                                if "429" in error_text or "rate" in error_text.lower():
+                                    st.warning(f"⏳ Rate limit hit. Please wait and retry. ({title})")
+                                elif "401" in error_text or "unauthorized" in error_text.lower():
+                                    st.error("❌ Authentication error — check your HF_API_KEY in .env")
+                                else:
+                                    st.error(f"❌ Pipeline failed: {error_text[:200]}")
+
+            # ── Tailoring results for this job ───────────────────────────────
+            if idx in pipeline_results:
+                pr = pipeline_results[idx]
+                resume_summary = pr.get("resume_summary", "")
+                cover_letter = pr.get("cover_letter", "")
+                outreach = pr.get("outreach_message", "")
+
+                # Validation
+                if resume_text and resume_summary:
+                    vr = validate_tailored_resume(resume_text, resume_summary)
+                    if not vr["is_clean"]:
+                        items = vr["invented_skills"] + vr["invented_numbers"]
+                        st.warning(
+                            f"⚠️ Potential invented content detected — please review: "
+                            + ", ".join(f"`{i}`" for i in items[:10])
+                        )
+
+                result_tab1, result_tab2, result_tab3 = st.tabs(
+                    ["📝 Resume Summary", "📨 Cover Letter", "💬 Outreach Message"]
+                )
+                with result_tab1:
+                    if resume_summary:
+                        st.markdown(resume_summary)
+                    else:
+                        st.info("Resume summary could not be generated.")
+
+                with result_tab2:
+                    if cover_letter:
+                        st.markdown(cover_letter)
+                    else:
+                        st.info("Cover letter could not be generated.")
+
+                with result_tab3:
+                    if outreach:
+                        st.markdown(outreach)
+                    else:
+                        st.info("Outreach message could not be generated.")
+
+                # ── Download DOCX ─────────────────────────────────────────────
+                try:
+                    docx_bytes = build_resume_docx(
+                        job_title=pr.get("job_title", title),
+                        company=pr.get("company", company),
+                        resume_summary=resume_summary,
+                        cover_letter=cover_letter,
+                    )
+                    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:40]
+                    st.download_button(
+                        label="⬇️ Download as DOCX",
+                        data=docx_bytes,
+                        file_name=f"{safe_title}_application.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key=f"download_{idx}",
+                    )
+                except Exception as exc:
+                    st.caption(f"DOCX export unavailable: {exc}")
+
+            st.divider()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Footer
+# ─────────────────────────────────────────────────────────────────────────────
+st.caption(
+    "Job data via [JSearch](https://app.openwebninja.com/api/jsearch) · "
+    "AI by CrewAI + HuggingFace · Built with Streamlit"
+)

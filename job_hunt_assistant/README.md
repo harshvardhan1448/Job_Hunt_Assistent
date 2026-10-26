@@ -1,11 +1,12 @@
 # AI Job Hunt Assistant
 
-AI Job Hunt Assistant helps you search USAJobs postings and generate application-ready content using a multi-agent workflow.
+AI Job Hunt Assistant helps you find, rank, and apply to jobs from **LinkedIn, Indeed, Glassdoor, and more** — all from one Streamlit interface powered by AI agents.
 
-For each selected job, the app can produce:
-- an updated resume summary,
-- a tailored cover letter,
+For each job, the app produces:
+- a tailored resume summary,
+- a personalized cover letter,
 - a concise outreach message (LinkedIn/email),
+- a downloadable DOCX with all materials,
 - and an application log entry.
 
 ---
@@ -13,29 +14,33 @@ For each selected job, the app can produce:
 ## What This Project Does
 
 This project combines:
-- **USAJobs API** for live federal job postings,
-- **CrewAI** for agent orchestration,
-- **Google Gemini** for content generation,
+- **JSearch API** (via [OpenWebNinja](https://app.openwebninja.com/api/jsearch)) for live job postings aggregated from LinkedIn, Indeed, Glassdoor, and 20+ sources,
+- **sentence-transformers** (`all-MiniLM-L6-v2`) for semantic resume ↔ job-description matching,
+- **CrewAI** for multi-agent orchestration,
+- **Hugging Face** (Llama 3.1) for content generation,
 - **Streamlit** for a simple web interface.
 
 The pipeline runs three agents in sequence:
-1. **JD Analyst** – extracts key requirements from the job summary.
-2. **Resume & Cover Letter Writer** – creates a role-specific resume summary + cover letter.
+1. **JD Analyst** – extracts key requirements from the job description.
+2. **Resume & Cover Letter Writer** – creates a role-specific resume summary + cover letter (using only content from your actual resume).
 3. **Outreach Message Writer** – drafts a short networking/recruiter message.
 
 ---
 
 ## Features
 
-- Search USAJobs by keyword and location.
-- Select one or multiple job postings.
-- Generate outputs per job:
-  - Updated Resume Summary
-  - Cover Letter
-  - Outreach Message
+- Upload PDF or DOCX resume (or paste plain text).
+- AI-extracted candidate profile (titles, skills, years of experience, locations) — editable before search.
+- Search across LinkedIn, Indeed, Glassdoor and more by title + location.
+- Smart deduplication and 1-hour result cache to protect free-tier quota.
+- Semantic + skill-overlap ranking with tunable weights.
+- Ranked job cards with score badges, matched and missing skills.
+- One-click **Apply** link (opens the real job site — no auto-apply).
+- **Tailor my resume** button: runs the full AI pipeline for that one job.
+- Validation: flags any skills or numbers that appear in the tailored resume but not in the original.
+- Download tailored materials as a DOCX file.
 - Save application history to CSV.
-- Save generated cover letters to files.
-- Built-in retry/backoff behavior for API rate-limit errors.
+- Built-in retry/backoff for API rate-limit errors.
 
 ---
 
@@ -46,20 +51,22 @@ The pipeline runs three agents in sequence:
 | Language | Python 3.11 |
 | UI | Streamlit |
 | Orchestration | CrewAI |
-| LLM Provider | Google Gemini API |
-| Job Source | USAJobs API |
-| Utilities | python-dotenv, requests |
+| LLM Provider | Hugging Face (Llama 3.1) |
+| Job Source | JSearch API (LinkedIn, Indeed, Glassdoor…) |
+| Matching | sentence-transformers (`all-MiniLM-L6-v2`) |
+| Resume parsing | pypdf, python-docx |
+| Schema validation | Pydantic |
+| Utilities | python-dotenv, requests, numpy |
 
 ---
 
 ## Prerequisites
 
-Before running the app, make sure you have:
+Before running the app, you need:
 
 1. **Python 3.11** installed
-2. **USAJobs API key** from https://developer.usajobs.gov/APIRequest/Index
-3. **USAJobs registered email** (the one tied to your API request)
-4. **Gemini API key** from Google AI Studio / Gemini API
+2. **JSearch API key** — free at https://app.openwebninja.com/api/jsearch
+3. **Hugging Face API token** — from https://huggingface.co/settings/tokens
 
 ---
 
@@ -91,20 +98,18 @@ pip install -r requirements.txt
 
 Create a local `.env` file in `job_hunt_assistant/`.
 
-You can copy the values from `.env.example` and fill your real keys:
+Copy `.env.example` and fill in your real keys:
 
 ```env
-USAJOBS_API_KEY="your_usajobs_api_key_here"
-USAJOBS_EMAIL="your-email@example.com"
-GEMINI_API_KEY="your_gemini_api_key_here"
-GEMINI_MODEL="gemini/gemini-2.5-flash"
+JSEARCH_API_KEY="your_jsearch_api_key_here"
+HF_API_KEY="your_hf_api_token_here"
+HF_MODEL="huggingface/meta-llama/Llama-3.1-8B-Instruct"
 OPENAI_API_KEY="NA"
 ```
 
 ### Notes
-- `GEMINI_MODEL` is configurable.
-- Current default in code: `gemini/gemini-2.5-flash`.
-- If `.env` is missing in cloud, the app also reads `st.secrets`.
+- `HF_MODEL` is configurable. Default: `huggingface/meta-llama/Llama-3.1-8B-Instruct`.
+- If `.env` is missing in cloud, the app reads `st.secrets`.
 
 ---
 
@@ -120,17 +125,13 @@ Then open the local URL shown in terminal (usually `http://localhost:8501`).
 
 ## How to Use
 
-1. Enter **Job Keyword** and **Location**.
-2. Paste your **Resume**.
-3. Add a short **Bio** for outreach tone.
+1. **Upload** your PDF/DOCX resume (or paste plain text).
+2. **Review** the extracted profile and adjust titles, skills, and locations.
+3. Set your **location** and filters in the sidebar.
 4. Click **Search Jobs**.
-5. Select one or more jobs.
-6. Click **Apply to Selected Jobs**.
-
-For each selected job, the app displays:
-- **Updated Resume Summary**
-- **Cover Letter**
-- **Outreach Message**
+5. Browse the ranked job cards with match scores.
+6. Click **Apply** to go to the real job site, or **Tailor my resume** to run the AI pipeline.
+7. **Download** the generated DOCX with your tailored materials.
 
 ---
 
@@ -144,10 +145,9 @@ For each selected job, the app displays:
 3. In app **Secrets**, set:
 
 ```toml
-USAJOBS_API_KEY = "your_usajobs_api_key_here"
-USAJOBS_EMAIL   = "your-email@example.com"
-GEMINI_API_KEY  = "your_gemini_api_key_here"
-GEMINI_MODEL    = "gemini/gemini-2.5-flash"
+JSEARCH_API_KEY = "your_jsearch_api_key_here"
+HF_API_KEY      = "your_hf_api_token_here"
+HF_MODEL        = "huggingface/meta-llama/Llama-3.1-8B-Instruct"
 OPENAI_API_KEY  = "NA"
 ```
 
@@ -155,50 +155,31 @@ OPENAI_API_KEY  = "NA"
 
 ---
 
-## Output Files
-
-- Application log CSV: `data/applications_log.csv`
-- Generated cover letters: `data/cover_letters/`
-
----
-
-## Troubleshooting
-
-### 1) `429 RESOURCE_EXHAUSTED` (quota/rate limits)
-- Wait for retry window and try again.
-- Process fewer jobs at once.
-- Ensure billing is enabled on the Google project for your key.
-
-### 2) `404 model not found`
-- Your model may be deprecated for new users.
-- Set `GEMINI_MODEL` to a currently supported model (default here: `gemini/gemini-2.5-flash`).
-
-### 3) USAJobs request failures
-- Confirm `USAJOBS_API_KEY` and `USAJOBS_EMAIL` are correct.
-- Verify email matches the one registered with USAJobs.
-
-### 4) App works locally but fails in Streamlit Cloud
-- Re-check Streamlit secrets.
-- Reboot app after changing secrets.
-
----
-
 ## Project Structure
 
 ```
 job_hunt_assistant/
-├── streamlit_app.py
-├── orchestrator.py
-├── usajobs_api.py
+├── streamlit_app.py          ← Streamlit UI (upload → profile → search → rank → tailor)
+├── orchestrator.py           ← Multi-agent pipeline runner
 ├── requirements.txt
-├── Readme.md
+├── README.md
+├── providers/
+│   ├── __init__.py
+│   └── jsearch_api.py        ← JSearch client + normalize()
+├── services/
+│   ├── __init__.py
+│   ├── search.py             ← Multi-query search, dedup, cache
+│   └── matcher.py            ← Hard filters + semantic + skill ranking
 ├── agents/
 │   ├── jd_analyst.py
 │   ├── resume_cl_agent.py
 │   └── messaging_agent.py
 ├── utils/
-│   ├── config.py
-│   └── tracking.py
+│   ├── config.py             ← Centralized secrets loader
+│   ├── resume_parser.py      ← PDF/DOCX parser + Profile schema
+│   ├── validator.py          ← "No invented skills" post-generation check
+│   ├── exporter.py           ← DOCX export helper
+│   └── tracking.py           ← CSV application log
 ├── data/
 │   ├── applications_log.csv
 │   ├── report.md
@@ -211,10 +192,43 @@ job_hunt_assistant/
 
 ---
 
+## Output Files
+
+- Application log CSV: `data/applications_log.csv`
+- Generated cover letters: `data/cover_letters/`
+- Analysis reports: `data/report.md`
+
+---
+
+## Troubleshooting
+
+### 1) `JSEARCH_API_KEY is not set`
+- Get your free key at https://app.openwebninja.com/api/jsearch
+- Add it to `.env` or Streamlit secrets.
+
+### 2) `429 RESOURCE_EXHAUSTED` (quota/rate limits)
+- Wait for retry window and try again.
+- The app retries automatically with exponential backoff.
+- Search results are cached for 1 hour to reduce calls.
+
+### 3) Empty search results
+- Check your API key is valid.
+- Try broadening the query (fewer skills, wider location).
+- Try changing `Date posted` to "month".
+
+### 4) `404 model not found` (HuggingFace)
+- Set `HF_MODEL` to a currently supported model.
+
+### 5) App works locally but fails in Streamlit Cloud
+- Re-check Streamlit secrets match `.env.example` key names.
+- Reboot app after changing secrets.
+
+---
+
 ## Security Best Practices
 
 - Never commit real API keys.
-- Keep `.env` and `.streamlit/secrets.toml` out of git.
+- Keep `.env` and `.streamlit/secrets.toml` out of git (both are in `.gitignore`).
 - Rotate keys immediately if accidentally exposed.
 
 ---
