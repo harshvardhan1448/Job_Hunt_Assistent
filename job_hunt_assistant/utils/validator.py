@@ -25,9 +25,6 @@ _SKILL_PATTERNS = [
     r"\b(agile|scrum|kanban|jira|confluence|devops|ci/cd)\b",
 ]
 
-_NUMBER_PATTERN = re.compile(r"\b\d+[\+%xX]?\b")
-
-
 def _extract_skills(text: str) -> set[str]:
     """Return a set of skill tokens found in ``text``."""
     found: set[str] = set()
@@ -39,8 +36,9 @@ def _extract_skills(text: str) -> set[str]:
 
 
 def _extract_numbers(text: str) -> set[str]:
-    """Return a set of numeric tokens (years, percentages, multipliers) from ``text``."""
-    return set(_NUMBER_PATTERN.findall(text))
+    """Return normalized whole-number and decimal claims from ``text``."""
+    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text or "")
+    return set(re.findall(r"\d+(?:\.\d+)?", text))
 
 
 def validate_tailored_resume(original_text: str, tailored_text: str) -> dict:

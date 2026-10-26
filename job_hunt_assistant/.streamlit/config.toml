@@ -8,6 +8,7 @@ textColor = "#262730"
 headless = true
 port = 8501
 enableCORS = false
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false

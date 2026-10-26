@@ -64,21 +64,15 @@ def _passes_location_filter(job: dict, profile: Profile, location_query: str) ->
     if job.get("remote"):
         return True
 
-    job_location = (job.get("location") or "").lower()
-    if not job_location:
-        return True  # no location info → don't filter out
-
-    # Check UI location
-    loc_tokens = [t.strip() for t in re.split(r"[,\s]+", location_query.lower()) if t.strip()]
-    if any(tok in job_location for tok in loc_tokens if len(tok) > 2):
+    wanted = [
+        location.strip().lower()
+        for location in ([location_query] + list(profile.preferred_locations))
+        if location and location.strip()
+    ]
+    if not wanted:
         return True
-
-    # Check profile preferred locations
-    for pref in profile.preferred_locations:
-        if pref.lower() in job_location or job_location in pref.lower():
-            return True
-
-    return False
+    job_location = (job.get("location") or "").lower()
+    return any(location in job_location for location in wanted)
 
 
 def _passes_date_filter(job: dict, max_age_days: int = MAX_AGE_DAYS) -> bool:
@@ -111,6 +105,10 @@ def _passes_date_filter(job: dict, max_age_days: int = MAX_AGE_DAYS) -> bool:
 # Skill matching
 # ---------------------------------------------------------------------------
 
+def _has_skill(text: str, skill: str) -> bool:
+    pattern = r"(?<![A-Za-z0-9+#])" + re.escape(skill.strip()) + r"(?![A-Za-z0-9+#])"
+    return re.search(pattern, text or "", re.IGNORECASE) is not None
+
 def _extract_skill_overlap(job: dict, profile: Profile) -> tuple[float, list[str], list[str]]:
     """Compute the fraction of detected job skills that the candidate has.
 
@@ -123,11 +121,11 @@ def _extract_skill_overlap(job: dict, profile: Profile) -> tuple[float, list[str
     """
     # Prefer explicit skills list from API; fall back to scanning description
     api_skills: list[str] = job.get("required_skills") or []
-    description = (job.get("description") or "").lower()
+    description = job.get("description") or ""
 
     if not api_skills:
         # Heuristic: scan description for candidate skills
-        api_skills = [s for s in profile.skills if s.lower() in description]
+        api_skills = [s for s in profile.skills if _has_skill(description, s)]
 
     if not api_skills:
         return 0.0, [], []

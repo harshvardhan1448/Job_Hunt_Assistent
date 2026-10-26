@@ -31,8 +31,8 @@ signal_module.signal = _safe_signal
 import time
 import streamlit as st
 
-from utils.resume_parser import parse_resume, extract_profile_from_resume, Profile
-from services.search import search_jobs
+from utils.resume_parser import parse_resume, extract_profile_from_resume, Profile, sanitize_titles
+from services.search import search_jobs_with_details, search_with_fallback
 from services.matcher import rank_jobs
 from orchestrator import run_pipeline
 from utils.validator import validate_tailored_resume
@@ -161,7 +161,7 @@ with col2:
 
 # Rebuild profile from edited fields
 edited_profile = Profile(
-    target_titles=[t.strip() for t in raw_titles.splitlines() if t.strip()],
+    target_titles=sanitize_titles([t.strip() for t in raw_titles.splitlines() if t.strip()]),
     skills=[s.strip() for s in raw_skills.splitlines() if s.strip()],
     years_experience=years_exp,
     preferred_locations=[p.strip() for p in raw_locations.splitlines() if p.strip()],
@@ -179,6 +179,8 @@ with clear_col:
     if st.button("🗑 Clear results"):
         for key in ["jobs", "ranked_jobs", "pipeline_results"]:
             st.session_state.pop(key, None)
+        # Also remove cached API responses, including an empty result from a previous key.
+        search_with_fallback.clear()
         st.rerun()
 
 if not resume_text:
@@ -187,20 +189,19 @@ if not resume_text:
 if do_search:
     with st.spinner("Searching across LinkedIn, Indeed, Glassdoor and more…"):
         try:
-            raw_jobs = search_jobs(
+            raw_jobs, search_errors, search_counts = search_jobs_with_details(
                 profile=edited_profile,
                 location=location,
                 country=country_code,
                 date_posted=date_posted,
             )
+            with st.expander("Search details"):
+                st.write("Queries and results:", search_counts)
             if not raw_jobs:
-                st.warning(
-                    "No jobs returned. This could mean:\n"
-                    "- Your JSEARCH_API_KEY is missing or invalid\n"
-                    "- No fresh postings matched your query\n"
-                    "- The free-tier quota has been reached\n\n"
-                    "Check your .env file and try again."
-                )
+                if search_errors:
+                    st.error("\n\n".join(search_errors))
+                else:
+                    st.warning("No jobs found. Try a broader title or set Date posted to 'month'.")
             else:
                 ranked = rank_jobs(
                     jobs=raw_jobs,

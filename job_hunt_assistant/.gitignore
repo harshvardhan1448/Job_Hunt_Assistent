@@ -1,6 +1,7 @@
 ﻿# Python byte-code
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Virtual-environment folders
 venv/
@@ -23,3 +24,5 @@ Thumbs.db
 # Data that can be regenerated
 data/cover_letters/
 data/applications_log.csv
+
+ *.pyc

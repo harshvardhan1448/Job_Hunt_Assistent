@@ -4,6 +4,7 @@ python-dotenv>=1.0.0
 requests>=2.31.0
 streamlit>=1.38.0
 pypdf>=4.0.0
+pymupdf>=1.24.0
 python-docx>=1.1.0
 sentence-transformers>=2.7.0
 numpy>=1.26.0

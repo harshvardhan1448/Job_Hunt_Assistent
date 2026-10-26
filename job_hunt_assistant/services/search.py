@@ -11,12 +11,14 @@ It wraps ``providers.jsearch_api.fetch_jobs`` with:
 from __future__ import annotations
 
 import time
-from typing import Optional
+import requests
 
 import streamlit as st
 
 from providers.jsearch_api import fetch_jobs
-from utils.resume_parser import Profile
+from utils.resume_parser import Profile, clean_title
+
+MAX_QUERIES = 2
 
 
 # ---------------------------------------------------------------------------
@@ -72,21 +74,17 @@ def _build_queries(profile: Profile, location: str) -> list[str]:
         List of query strings to submit to JSearch.
     """
     queries: list[str] = []
-    loc = location.strip()
+    city = (location or "").split(",")[0].strip()
+    titles = list(dict.fromkeys(
+        title for title in (clean_title(item) for item in profile.target_titles) if title
+    ))[:MAX_QUERIES] or ["software engineer"]
+    if not city or city.lower() == "remote":
+        return titles
 
-    titles = profile.target_titles[:5] if profile.target_titles else ["software engineer"]
+    queries: list[str] = []
     for title in titles:
-        base_query = f"{title} {loc}".strip()
-        queries.append(base_query)
-
-    # Add a skills-enriched query using the top skills
-    if profile.skills:
-        top_skills = " ".join(profile.skills[:3])
-        skill_query = f"{titles[0]} {top_skills} {loc}".strip()
-        if skill_query not in queries:
-            queries.append(skill_query)
-
-    return queries[:5]  # cap at 5 to stay within quota
+        queries.append(f"{title} in {city}")
+    return queries
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +92,15 @@ def _build_queries(profile: Profile, location: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def search_with_fallback(query: str, country: str, date_posted: str) -> tuple[list[dict], str | None]:
+    """Search with the requested freshness, then widen to a month if empty."""
+    for freshness in dict.fromkeys([date_posted, "month"]):
+        jobs = _fetch_with_retry(query, country, freshness)
+        if jobs:
+            return jobs, freshness
+    return [], None
+
+
 def cached_search(queries_tuple: tuple[str, ...], country: str, date_posted: str) -> list[dict]:
     """Execute a deduplicated multi-query job search with a 1-hour cache.
 
@@ -110,13 +117,8 @@ def cached_search(queries_tuple: tuple[str, ...], country: str, date_posted: str
     """
     all_jobs: list[dict] = []
     for query in queries_tuple:
-        try:
-            results = _fetch_with_retry(query, country, date_posted)
-            all_jobs.extend(results)
-        except Exception as exc:
-            # Log but continue — one failed query shouldn't abort the search
-            print(f"⚠️  Query '{query}' failed: {exc}")
-
+        results, _ = search_with_fallback(query, country, date_posted)
+        all_jobs.extend(results)
     return _dedup_jobs(all_jobs)
 
 
@@ -176,3 +178,39 @@ def search_jobs(
     """
     queries = _build_queries(profile, location)
     return cached_search(tuple(queries), country, date_posted)
+
+
+def search_jobs_with_details(
+    profile: Profile,
+    location: str,
+    country: str = "in",
+    date_posted: str = "week",
+) -> tuple[list[dict], list[str], dict[str, str]]:
+    """Search while retaining query counts and provider errors for the UI."""
+    queries = _build_queries(profile, location)
+    all_jobs: list[dict] = []
+    errors: list[str] = []
+    counts: dict[str, str] = {}
+    for query in queries:
+        try:
+            jobs, used_date = search_with_fallback(query, country, date_posted)
+            counts[query] = f"{len(jobs)} jobs (date_posted={used_date})"
+            all_jobs.extend(jobs)
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            body = (exc.response.text if exc.response is not None else str(exc))[:150]
+            errors.append(f"'{query}' -> HTTP {status}: {body}")
+        except Exception as exc:
+            errors.append(f"'{query}' -> {type(exc).__name__}: {str(exc)[:200]}")
+
+    jobs = _dedup_jobs(all_jobs)
+    if not jobs:
+        fallback = f"software engineer in {(location or '').split(',')[0].strip()}".strip()
+        if fallback not in queries:
+            try:
+                fallback_jobs, used_date = search_with_fallback(fallback, country, date_posted)
+                counts[fallback] = f"{len(fallback_jobs)} jobs (date_posted={used_date})"
+                jobs = _dedup_jobs(fallback_jobs)
+            except Exception as exc:
+                errors.append(f"'{fallback}' -> {type(exc).__name__}: {str(exc)[:200]}")
+    return jobs, errors, counts

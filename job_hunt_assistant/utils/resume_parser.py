@@ -2,7 +2,7 @@
 
 Supported formats
 -----------------
-- PDF  – via ``pypdf``
+- PDF  – via ``pymupdf``
 - DOCX – via ``python-docx``
 
 The ``parse_resume`` function also accepts a plain-text string so the Streamlit
@@ -17,6 +17,30 @@ import re
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+_DATE_RANGE = re.compile(
+    rf"\b{_MONTH}\s*\d{{4}}\s*[–—-]\s*(?:present|current|{_MONTH}\s*\d{{4}})",
+    re.IGNORECASE,
+)
+
+
+def clean_title(raw: str) -> str:
+    """Turn an extracted resume line into a short job-board title."""
+    title = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", raw or "")
+    title = _DATE_RANGE.sub(" ", title)
+    title = re.sub(r"\b(?:19|20)\d{2}\b|\b(?:present|current)\b", " ", title, flags=re.IGNORECASE)
+    title = re.split(r"\s[-–—|@,]\s", title)[0]
+    title = re.sub(r"\s+", " ", title).strip(" -–—|,")
+    return title if 2 <= len(title) <= 40 else ""
+
+
+def sanitize_titles(titles: list[str], skills: list[str] | None = None) -> list[str]:
+    """Deduplicate and constrain profile titles to usable search terms."""
+    cleaned = list(dict.fromkeys(title for title in (clean_title(item) for item in titles) if title))
+    if not cleaned and skills:
+        cleaned = [f"{skills[0]} developer"]
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -58,13 +82,13 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         Extracted plain text, pages joined by newlines.
     """
     try:
-        from pypdf import PdfReader
+        import fitz
     except ImportError as exc:
-        raise ImportError("pypdf is required for PDF parsing. Run: pip install pypdf") from exc
+        raise ImportError("PyMuPDF is required for PDF parsing. Run: pip install pymupdf") from exc
 
-    reader = PdfReader(io.BytesIO(file_bytes))
-    pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n".join(pages).strip()
+    with fitz.open(stream=file_bytes, filetype="pdf") as document:
+        text = "\n".join(page.get_text("text") for page in document)
+    return re.sub(r"[ \t]+", " ", text).strip()
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
@@ -142,11 +166,16 @@ def extract_profile_from_resume(resume_text: str) -> Profile:
 
 Return this exact JSON structure (no extra text, no markdown, just JSON):
 {
-  "target_titles": ["list of job titles the person targets based on their background"],
+    "target_titles": ["2-4 standard job-board titles, maximum 4 words each; no dates, companies, or Present"],
   "skills": ["list of technical and soft skills found in the resume"],
-  "years_experience": 0.0,
+    "years_experience": 0.0,
   "preferred_locations": ["list of locations mentioned or inferred from work history"]
-}"""
+}
+
+Rules:
+- Choose standard titles such as "AI Engineer" or "Machine Learning Engineer".
+- Calculate years_experience from work-history dates; use 0 for freshers.
+- Never copy an entire resume line into target_titles."""
 
     user_prompt = f"Extract profile from this resume:\n\n{truncated}"
 
@@ -169,10 +198,17 @@ Return this exact JSON structure (no extra text, no markdown, just JSON):
         json_match = re.search(r"\{.*\}", raw_output, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group())
-            return Profile(**data)
+            profile = Profile(**data)
+            profile.target_titles = sanitize_titles(profile.target_titles, profile.skills)
+            return profile
 
     except Exception as e:
         print(f"⚠️  LLM profile extraction failed: {e}. Using heuristic fallback.")
+        try:
+            import streamlit as st
+            st.warning(f"AI extraction failed, using basic parser: {e}")
+        except Exception:
+            pass
 
     # Heuristic fallback — simple keyword extraction when LLM is unavailable
     return _heuristic_profile(resume_text)
@@ -214,7 +250,7 @@ def _heuristic_profile(resume_text: str) -> Profile:
             title_candidates.append(stripped)
 
     return Profile(
-        target_titles=title_candidates[:5],
+        target_titles=sanitize_titles(title_candidates, found_skills),
         skills=found_skills,
         years_experience=float(max_exp),
         preferred_locations=[],
